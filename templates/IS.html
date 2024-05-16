@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>File Upload Example</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            margin: 0;
+        }
+
+        #top-section {
+            flex: 30%;
+            background-color: #f2f2f2;
+            padding: 20px;
+        }
+
+        #bottom-section {
+            flex: 70%;
+            background-color: #fff;
+            padding: 20px;
+            display: flex;
+        }
+
+        #left-section {
+            flex: 50%;
+            padding-right: 10px;
+            border-right: 2px solid #ddd; /* Add a border */
+        }
+
+        #right-section {
+            flex: 50%;
+            padding-left: 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            justify-content: flex-start;
+        }
+
+        #key-button {
+            background-color: #007BFF;
+            color: white;
+            padding: 5px 10px;
+            border: none;
+            cursor: pointer;
+        }
+
+        #file-input {
+            display: none;
+        }
+
+        #file-upload-container {
+            display: flex;
+            align-items: center;
+        }
+
+        #file-name {
+            margin-left: 10px;
+        }
+        .single-line {
+            display: flex;
+            align-items: center;
+        }
+    </style>
+    
+</head>
+<body>
+    <body>
+        <div id="top-section">
+            <form method="POST" action="/calculate">
+                <h2>Generation of Key Using RSA</h2>
+                <p>Generate Private Key and Public Key</p>
+    
+                <label for="p">Enter P:</label>
+                <input type="text" id="p" name="p"><br><br>
+    
+                <label for="q">Enter Q:</label>
+                <input type="text" id="q" name="q"><br><br>
+    
+                <a href="#" onclick="downloadPublicKey()"><button type="button">Download Public Key</button></a>
+                <a href="#" onclick="downloadPrivateKey()"><button type="button">Download Private Key</button></a>
+            </form>
+        </div>
+    
+        <div id="bottom-section">
+            <div id="left-section">
+                <h2>Creation of Digital Signature</h2>
+                 <!-- Add the message div here -->
+                
+                <form id="file-upload-form" action="/upload_file" method="post" enctype="multipart/form-data">
+                    <div id="upload-container">
+                        <label for="file" id="choose-button">Choose the file: </label>
+                        <input type="file" name="file" id="file" accept=".txt">
+                        <button type="button" id="upload-file-button">Upload</button>
+                    </div>
+                    <div id="message-div"></div>
+                </form>
+                <br>
+                <button id="sha1-button">SHA-1</button>
+                <p class="single-line">
+                    <label for="hash-output">Hash Output:</label>
+                    <input type="text" id="hash-output" onclick="calculateSHA1()">
+                </p>             
+                <form id="private-key-upload-form" action="/upload_private_key" method="post" enctype="multipart/form-data">
+                    <label for="pvtkey" id="choose-private-key-button">Choose Private Key:</label>
+                    <input type="file" name="pvtkey" id="pvtkey" accept=".txt">
+                    <button type="button" id="upload-pvtkey-button">Upload</button>
+                </form>
+                <div id="private-key-message-div"></div>
+                
+                <br>
+                <button id="generate-button">Generate Signature</button>
+            </div>
+            
+            <div id="right-section">
+                <h2>Verification of Digital Signature</h2>
+                <form id="upload-form" enctype="multipart/form-data">
+                    <label for="check-file" id="choose-file">Choose the File to be verified:</label>
+                    <input type="file" name="file" id="check-file" accept=".txt">
+                    <button id="upload-verify-file-button" type="button">Upload</button>
+                    <p id="upload-status"></p> <!-- Add a paragraph to display upload status -->
+                </form><br>
+                
+                <!-- Add the section for choosing a public key file -->
+                <form id="public-key-form" enctype="multipart/form-data">
+                    <label for="public-key-file">Choose the Public Key File:</label>
+                    <input type="file" name="public-key-file" id="public-key-file" accept=".txt">
+                    <button id="upload-public-key-button" type="button">Upload Public Key</button>
+                    <p id="public-key-upload-status"></p> <!-- Add a paragraph to display upload status for public key -->
+                </form><br>
+                
+                <button id="verify-button">Verify Signature</button>
+                <p class="single-line">
+                    <label for="verify">Status:</label>
+                    <label id="verify-label"></label>
+                </p>
+            </div>
+            
+            
+            
+        </div>
+
+
+<!-- verification of the signature -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/3.1.9-1/crypto-js.js"></script>
+<script>
+    function verifySignature() {
+    // Clear any previous status messages
+    document.getElementById("verify-label").textContent = "";
+
+    // Get the file input elements
+    var checkFileInput = document.getElementById("check-file");
+    var publicKeyFileInput = document.getElementById("public-key-file");
+
+    // Check if both files have been selected
+    if (!checkFileInput.files.length || !publicKeyFileInput.files.length) {
+        document.getElementById("verify-label").textContent = "Please upload both files.";
+        return;
+    }
+
+    // Read the contents of the file to be verified
+    var checkFileReader = new FileReader();
+    var publicKeyFileReader = new FileReader();
+
+    checkFileReader.onload = function (event) {
+        var checkFileContent = event.target.result;
+
+        // Split the contents based on "HASH:" delimiter
+        var parts = checkFileContent.split("HASH:");
+        
+        if (parts.length !== 2) {
+            document.getElementById("verify-label").textContent = "Signature is not valid. Message has been tampered with.";
+            return;
+        }
+
+        // Store the parts in variables
+        var originalmsg = parts[0].trim();
+        var encryptedhash = parts[1].trim();
+
+        // Read the contents of the public key file
+        publicKeyFileReader.onload = function (event) {
+            var publicKeyFileContent = event.target.result;
+
+            // Split the contents based on ","
+            var publicKeyParts = publicKeyFileContent.split(",");
+
+            if (publicKeyParts.length !== 2) {
+                document.getElementById("verify-label").textContent = "Invalid public key format. Missing ',' delimiter.";
+                return;
+            }
+
+            // Store the parts in variables
+            var e1 = publicKeyParts[0].trim();
+            var n1 = publicKeyParts[1].trim();
+
+            // Calculate the SHA-1 hash of originalmsg
+            var sha1Hash = CryptoJS.SHA1(originalmsg).toString();
+            var msgNumeric = BigInt("0x" + sha1Hash);
+            var msgHexadecimal = msgNumeric.toString(16);
+
+
+            //lakshmi
+            var msg1=encryptedhash;
+            var encryptedMessage = BigInt("0x" + msg1);
+            var decryptedMessage = encryptedMessage ** BigInt(e1) % BigInt(n1);
+            var encryptedMessageHex = decryptedMessage.toString(16);
+            //var decryptedText1 = String.fromCharCode.apply(null, new Uint8Array(Buffer.from(decryptedMessage1.toString(16), 'hex')));
+            
+            if (encryptedMessageHex === msgHexadecimal) {
+                document.getElementById("verify-label").textContent = "Signature is not valid. Message has been tampered with.";
+} 
+else {
+    document.getElementById("verify-label").textContent = "Signature is valid. Message has not been tampered with.";
+}
+
+            // Set the combined content in the "Status" label
+            //document.getElementById("verify-label").textContent = "Original Message: " + originalmsg + "\nSHA-1 Hash of Original Message: " + sha1Hash + "\nEncrypted Hash: " + encryptedhash + "\ndecryptedMessage " + encryptedMessageHex1;
+
+        };
+
+        // Read the public key file as text
+        publicKeyFileReader.readAsText(publicKeyFileInput.files[0]);
+    };
+
+    // Read the check file as text
+    checkFileReader.readAsText(checkFileInput.files[0]);
+}
+
+// Attach the verifySignature function to the "Verify Signature" button
+var verifyButton = document.getElementById("verify-button");
+verifyButton.addEventListener("click", verifySignature);
+
+</script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<!--upload of public key file part -->
+<script>
+    // Function to handle the upload of the public key file
+    function uploadPublicKey() {
+        // Clear any previous status messages
+        document.getElementById("public-key-upload-status").innerText = "";
+
+        // Get the file input element
+        var publicKeyFileInput = document.getElementById("public-key-file");
+
+        // Check if a file has been selected
+        if (!publicKeyFileInput.files.length) {
+            document.getElementById("public-key-upload-status").innerText = "Please choose a public key file.";
+            return;
+        }
+
+        // Create a FormData object to send the file
+        var formData = new FormData();
+        formData.append("file", publicKeyFileInput.files[0]);  // Use 'file' as the name
+
+        // Send a POST request to the server to upload the file
+        fetch("/upload_file", {
+            method: "POST",
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            // Display the upload status message from the server response
+            document.getElementById("public-key-upload-status").innerText = data.message;
+        })
+        .catch(error => {
+            console.error("Error:", error);
+            document.getElementById("public-key-upload-status").innerText = "An error occurred while uploading the public key.";
+        });
+    }
+
+    // Attach the uploadPublicKey function to the "Upload Public Key" button
+    var uploadPublicKeyButton = document.getElementById("upload-public-key-button");
+    uploadPublicKeyButton.addEventListener("click", uploadPublicKey);
+</script>
+
+
+
+
+
+
+    <!-- for verify part file upload-->
+    <!--
+    <script>
+       document.addEventListener("DOMContentLoaded", function () {
+    const uploadForm = document.getElementById("upload-form");
+    const uploadButton = document.getElementById("upload-verify-file-button");
+    const uploadStatus = document.getElementById("upload-status");
+    const verifyButton = document.getElementById("verify-button");
+    const verifyStatus = document.getElementById("verify");
+
+    let uploadedFileContent = null;
+    let msg = null;
+    let decryptmessage = null;
+
+    uploadButton.addEventListener("click", function () {
+        const formData = new FormData(uploadForm);
+
+        fetch("/upload_file", {
+            method: "POST",
+            body: formData,
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                uploadStatus.textContent = data.message;
+            } else {
+                uploadStatus.textContent = "File upload failed.";
+            }
+        })
+        .catch(error => {
+            uploadStatus.textContent = "Error: " + error.message;
+        });
+    });
+
+    verifyButton.addEventListener("click", function () {
+        if (msg !== null && decryptmessage !== null) {
+            // Display the uploaded file content in the "verify" textbox
+            verifyStatus.value = `Message: ${msg}\nDecrypt Message: ${decryptmessage}`;
+        } else {
+            verifyStatus.value = "Please upload a file first.";
+        }
+    });
+
+    // Handle file input change to read the uploaded file's content
+    const fileInput = document.getElementById("check-file");
+    fileInput.addEventListener("change", function () {
+        const file = fileInput.files[0];
+        const reader = new FileReader();
+
+        reader.onload = function(event) {
+            uploadedFileContent = event.target.result;
+
+            // Split the file content using "HASH:" as a delimiter
+            const parts = uploadedFileContent.split("HASH:");
+
+            if (parts.length === 2) {
+                msg = parts[0].trim();
+                decryptmessage = parts[1].trim();
+            } else {
+                msg = null;
+                decryptmessage = null;
+                uploadStatus.textContent = "Invalid file format.";
+            }
+        };
+
+        reader.readAsText(file);
+    });
+});
+
+    </script>
+    -->
+  
+        <script>
+            document.addEventListener("DOMContentLoaded", function () {
+                const uploadForm = document.getElementById("upload-form");
+                const uploadButton = document.getElementById("upload-verify-file-button");
+                const uploadStatus = document.getElementById("upload-status");
+            
+                uploadButton.addEventListener("click", function () {
+                    const formData = new FormData(uploadForm);
+            
+                    fetch("/upload_file", {
+                        method: "POST",
+                        body: formData,
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            uploadStatus.textContent = data.message;
+                        } else {
+                            uploadStatus.textContent = "File upload failed.";
+                        }
+                    })
+                    .catch(error => {
+                        uploadStatus.textContent = "Error: " + error.message;
+                    });
+                });
+            });
+            </script>
+            
+
+  
+
+
+<!-- 
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    document.getElementById("generate-button").addEventListener("click", function () {
+        // Fetch the uploaded file content
+        var fileInput = document.getElementById("file");
+        var file = fileInput.files[0];
+        var reader = new FileReader();
+
+        reader.onload = function(event) {
+            var fileContent = event.target.result;
+
+            // Use the content of the uploaded file as the message
+            var message = fileContent;
+
+            // Fetch the first letter of the private key from the "pvtkey" input
+            var pvtKeyInput = document.getElementById("pvtkey");
+            var pvtKey = pvtKeyInput.value[0];
+
+            // Fetch the first letter of the hash message from the "hash-output" input
+            var hashOutputInput = document.getElementById("hash-output");
+            var hashOutput = hashOutputInput.value[0];
+
+            // Combine the first letters into a signature string
+            var signature = message + pvtKey + hashOutput;
+
+            // Create a Blob with the signature data
+            var signatureBlob = new Blob([signature], { type: "text/plain" });
+
+            // Create an object URL for the Blob
+            var signatureURL = URL.createObjectURL(signatureBlob);
+
+            // Create a temporary anchor element for downloading
+            var downloadLink = document.createElement("a");
+            downloadLink.href = signatureURL;
+            downloadLink.download = "signature.txt"; // Set the file name
+
+            // Trigger a click event to initiate the download
+            downloadLink.click();
+
+            // Clean up: Revoke the object URL to free up resources
+            URL.revokeObjectURL(signatureURL);
+        };
+
+        // Read the file as text
+        reader.readAsText(file);
+    });
+});
+
+</script>
+
+
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+    document.getElementById("generate-button").addEventListener("click", function () {
+        // Fetch the uploaded file content
+        var fileInput = document.getElementById("file");
+        var file = fileInput.files[0];
+        var reader = new FileReader();
+
+        reader.onload = function (event) {
+            var fileContent = event.target.result;
+
+            // Use the content of the uploaded file as the message
+            var message = fileContent;
+
+            // Fetch the first letter of the private key from the "pvtkey" input
+            var pvtKeyInput = document.getElementById("pvtkey");
+            var pvtKey = pvtKeyInput.value[0];
+
+            // Fetch the first letter of the hash message from the "hash-output" input
+            var hashOutputInput = document.getElementById("hash-output");
+            var hashOutput = hashOutputInput.value[0];
+
+            // Create the signature string in the desired format
+            var signature = message + "\nHASH:\n" + hashOutput + "," + pvtKeyInput;
+
+            // Create a Blob with the signature data
+            var signatureBlob = new Blob([signature], { type: "text/plain" });
+
+            // Create an object URL for the Blob
+            var signatureURL = URL.createObjectURL(signatureBlob);
+
+            // Create a temporary anchor element for downloading
+            var downloadLink = document.createElement("a");
+            downloadLink.href = signatureURL;
+            downloadLink.download = "signature.txt"; // Set the file name
+
+            // Trigger a click event to initiate the download
+            downloadLink.click();
+
+            // Clean up: Revoke the object URL to free up resources
+            URL.revokeObjectURL(signatureURL);
+        };
+
+        // Read the file as text
+        reader.readAsText(file);
+    });
+});
+
+</script>
+
+-->
+<!--ans of generate sign part-->
+<script>
+   document.addEventListener("DOMContentLoaded", function () {
+    document.getElementById("generate-button").addEventListener("click", function () {
+        // Fetch the uploaded file content for the private key
+        var privateKeyFileInput = document.getElementById("pvtkey");
+        var privateKeyFile = privateKeyFileInput.files[0];
+        var reader = new FileReader();
+
+        reader.onload = function (event) {
+            var privateKeyContent = event.target.result;
+
+            // Use the content of the private key as needed
+            var pvtKeyInput = privateKeyContent; // You can parse and format the content as required
+
+            // Fetch the uploaded file content for the message
+            var fileInput = document.getElementById("file");
+            var file = fileInput.files[0];
+            var reader = new FileReader();
+
+            reader.onload = function(event) {
+                var fileContent = event.target.result;
+
+                // Use the content of the uploaded file as the message
+                var message = fileContent;
+
+                // Fetch the first letter of the hash message from the "hash-output" input
+                var hashOutputInput = document.getElementById("hash-output");
+                var hashOutput = hashOutputInput.value;
+///////////////////
+                var messageNumeric = BigInt("0x" + hashOutput);
+                var parts = pvtKeyInput.split(',');
+
+// Ensure there are two parts
+if (parts.length === 2) {
+    var d = parseInt(parts[0], 10); // Convert the first part to an integer (base 10)
+    var n = parseInt(parts[1], 10); // Convert the second part to an integer (base 10)
+
+    // Now, you have d and n as separate variables
+    console.log("d:", d);
+    console.log("n:", n);
+} else {
+    // Handle the case where there are not exactly two parts
+    console.error("Invalid input format");
+}
+var encryptedMessageNumeric = messageNumeric ** BigInt(d) % BigInt(n);
+var encryptedMessageHex = encryptedMessageNumeric.toString(16);
+
+///////////////
+                // Create the signature string in the desired format
+                var signature = message + "\nHASH:\n" + encryptedMessageHex;
+
+                // Create a Blob with the signature data
+                var signatureBlob = new Blob([signature], { type: "text/plain" });
+
+                // Create an object URL for the Blob
+                var signatureURL = URL.createObjectURL(signatureBlob);
+
+                // Create a temporary anchor element for downloading
+                var downloadLink = document.createElement("a");
+                downloadLink.href = signatureURL;
+                downloadLink.download = "signature.txt"; // Set the file name
+
+                // Trigger a click event to initiate the download
+                downloadLink.click();
+
+                // Clean up: Revoke the object URL to free up resources
+                URL.revokeObjectURL(signatureURL);
+            };
+
+            // Read the file as text
+            reader.readAsText(file);
+        };
+
+        // Read the private key file as text
+        reader.readAsText(privateKeyFile);
+    });
+});
+
+</script>
+
+<!--
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+    document.getElementById("generate-button").addEventListener("click", function () {
+        // Fetch the uploaded file content for the private key
+        var privateKeyFileInput = document.getElementById("pvtkey");
+        var privateKeyFile = privateKeyFileInput.files[0];
+
+        if (!privateKeyFile) {
+            console.error("Private key file not selected.");
+            return;
+        }
+
+        var reader = new FileReader();
+
+        reader.onload = function (event) {
+            var privateKeyContent = event.target.result;
+
+            // Use the content of the private key as needed
+            var pvtKeyInput = privateKeyContent; // You can parse and format the content as required
+
+            // Fetch the uploaded file content for the message
+            var fileInput = document.getElementById("file");
+            var file = fileInput.files[0];
+
+            if (!file) {
+                console.error("File to be signed not selected.");
+                return;
+            }
+
+            var reader = new FileReader();
+
+            reader.onload = function (event) {
+                var fileContent = event.target.result;
+
+                // Use the content of the uploaded file as the message
+                var message = fileContent;
+
+                // Fetch the first letter of the hash message from the "hash-output" input
+                var hashOutputInput = document.getElementById("hash-output");
+                var hashOutput = hashOutputInput.value;
+
+                var parts = pvtKeyInput.split(',');
+
+                var encryptedMessageHex="sarvik"
+                // Ensure there are two parts
+                if (parts.length === 2) {
+                    var d = parseInt(parts[0], 10); // Convert the first part to an integer (base 10)
+                    var n = parseInt(parts[1], 10); // Convert the second part to an integer (base 10)
+
+                    var messageNumeric = BigInt(Buffer.from(hashOutput, 'utf-8').toString('hex'), 16);
+
+                    // Perform RSA encryption
+                    var encryptedMessageNumeric = messageNumeric ** BigInt(d) % BigInt(n);
+
+                    // Now, encryptedMessageNumeric contains the encrypted message
+
+                    // You can convert it to a hexadecimal or base64 representation for transmission or storage
+                    encryptedMessageHex = encryptedMessageNumeric.toString(16);
+                }else {
+    // Handle the case where there are not exactly two parts
+    console.error("Invalid input format");
+}
+                
+                    // Create the signature string in the desired format
+                    var signature = message + "\nHASH:\n" + hashOutput + "," + pvtKeyInput + "\n" + encryptedMessageHex;
+
+                    // Create a Blob with the signature data
+                    var signatureBlob = new Blob([signature], { type: "text/plain" });
+
+                    // Create an object URL for the Blob
+                    var signatureURL = URL.createObjectURL(signatureBlob);
+
+                    // Create a temporary anchor element for downloading
+                    var downloadLink = document.createElement("a");
+                    downloadLink.href = signatureURL;
+                    downloadLink.download = "signature.txt"; // Set the file name
+
+                    // Trigger a click event to initiate the download
+                    downloadLink.click();
+
+                    // Clean up: Revoke the object URL to free up resources
+                    URL.revokeObjectURL(signatureURL);
+                } else {
+                    console.error("Invalid private key format.");
+                }
+            };
+
+            // Read the file as text
+            reader.readAsText(file);
+        };
+
+        // Read the private key file as text
+        reader.readAsText(privateKeyFile);
+    });
+});
+
+</script>
+
+-->
+
+
+
+
+
+<!-- hash display -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/3.1.9-1/crypto-js.js"></script>
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        document.getElementById("sha1-button").addEventListener("click", function () {
+            // Fetch the uploaded file content
+            var fileInput = document.getElementById("file");
+            var file = fileInput.files[0];
+            var reader = new FileReader();
+
+            reader.onload = function(event) {
+                var fileContent = event.target.result;
+
+                // Calculate the SHA-1 hash using crypto-js
+                var sha1_hash = CryptoJS.SHA1(fileContent).toString();
+
+                // Display the first character of the SHA-1 hash in the "Hash Output" textbox
+                document.getElementById("hash-output").value = sha1_hash;
+            };
+
+            // Read the file as text
+            reader.readAsText(file);
+        });
+    });
+</script>
+
+<!-- for upload of pvt key file part --> 
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        // Function to display a message in a div
+        function displayMessage(message, divId) {
+            var messageDiv = document.getElementById(divId);
+            messageDiv.innerText = message;
+        }
+
+        document.getElementById("upload-pvtkey-button").addEventListener("click", function () {
+            // Fetch the private key file
+            var pvtKeyInput = document.getElementById("pvtkey");
+            var pvtKeyFile = pvtKeyInput.files[0];
+
+            if (!pvtKeyFile) {
+                displayMessage("Please select a file.", "private-key-message-div");
+                return;
+            }
+
+            // Simulate a successful upload here
+            // You can replace this with actual file upload logic
+            setTimeout(function () {
+                displayMessage("Private key file uploaded successfully.", "private-key-message-div");
+            }, 1000); // Simulate a 1-second delay
+        });
+    });
+</script>
+
+
+
+
+
+
+<!-- for upload of msg file part -->        
+        <script>
+            document.addEventListener("DOMContentLoaded", function () {
+                document.getElementById("upload-file-button").addEventListener("click", function () {
+                    var formData = new FormData(document.getElementById("file-upload-form"));
+        
+                    fetch("/upload_file", {
+                        method: "POST",
+                        body: formData,
+                    })
+                        .then((response) => response.json())
+                        .then((data) => {
+                            if (data.success) {
+                                // Display success message
+                                document.getElementById("message-div").innerHTML = `<p>${data.message}</p>`;
+                            } else {
+                                // Display error message
+                                document.getElementById("message-div").innerHTML = `<p>Error: ${data.message}</p>`;
+                            }
+                        })
+                        .catch((error) => {
+                            console.error(error);
+                            // Display error message
+                            document.getElementById("message-div").innerHTML = "<p>Error: Unable to upload the file.</p>";
+                        });
+                });
+            });
+        </script>
+               
+</div>
+
+<!-- for top section -->
+<script>
+    function downloadPublicKey() {
+        var pValue = document.getElementById("p").value;
+        var qValue = document.getElementById("q").value;
+
+        // Check if both values are entered
+        if (pValue && qValue) {
+            var url = "/download_public_key?p=" + encodeURIComponent(pValue) + "&q=" + encodeURIComponent(qValue);
+            window.location.href = url;
+        }
+    }
+
+    function downloadPrivateKey() {
+        var pValue = document.getElementById("p").value;
+        var qValue = document.getElementById("q").value;
+
+        // Check if both values are entered
+        if (pValue && qValue) {
+            var url = "/download_private_key?p=" + encodeURIComponent(pValue) + "&q=" + encodeURIComponent(qValue);
+            window.location.href = url;
+        }
+    }
+</script>
+
+    
+</body>
+</html>
